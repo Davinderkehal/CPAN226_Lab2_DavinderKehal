@@ -1,12 +1,19 @@
+
+# This program was modified by Davinder Kehal / N01718686
+
 import socket
+
 import argparse
 import time
 import os
+import struct  # IMPROVEMENT: Handle sequence numbers
 
 def run_client(target_ip, target_port, input_file):
     # 1. Create a UDP socket
+    seq_num = 0  # IMPROVEMENT: Track packet order
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_address = (target_ip, target_port)
+    sock.settimeout(1.0)  # IMPROVEMENT: Timeout for ACK waiting
 
     print(f"[*] Sending file '{input_file}' to {target_ip}:{target_port}")
 
@@ -24,15 +31,22 @@ def run_client(target_ip, target_port, input_file):
                     # End of file reached
                     break
 
-                # Send the chunk
-                sock.sendto(chunk, server_address)
-                
-                # Optional: Small sleep to prevent overwhelming the OS buffer locally
-                # (In a perfect world, we wouldn't need this, but raw UDP is fast!)
-                time.sleep(0.001)
+                packet = struct.pack("!I", seq_num) + chunk   # IMPROVEMENT: Add sequence header
+
+            while True:
+                sock.sendto(packet, server_address)       # IMPROVEMENT: Send packet
+                try:
+                    ack, _ = sock.recvfrom(4)             # IMPROVEMENT: Wait for ACK
+                    ack_num = struct.unpack("!I", ack)[0] # IMPROVEMENT: Decode ACK
+                    if ack_num == seq_num:
+                        break                              # IMPROVEMENT: ACK confirmed
+                except socket.timeout:
+                    pass                                  # IMPROVEMENT: Retransmit on timeout
+
+            seq_num += 1                                  # IMPROVEMENT: Next packet
 
         # Send empty packet to signal "End of File"
-        sock.sendto(b'', server_address)
+        sock.sendto(struct.pack("!I", seq_num), server_address)  # IMPROVEMENT: EOF with sequence
         print("[*] File transmission complete.")
 
     except Exception as e:

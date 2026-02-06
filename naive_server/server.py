@@ -1,5 +1,9 @@
+
+# This program was modified by Davinder Kehal / N01718686
+
 import socket
 import argparse
+import struct  # IMPROVEMENT: Handle sequence numbers
 
 def run_server(port, output_file):
     # 1. Create a UDP socket
@@ -15,12 +19,16 @@ def run_server(port, output_file):
     try:
         while True:
             f = None
+            expected_seq = 0      # IMPROVEMENT: Track expected packet
+            buffer = {}           # IMPROVEMENT: Store out-of-order data
             sender_filename = None
             reception_started = False
             while True:
                 data, addr = sock.recvfrom(4096)
+                seq_num = struct.unpack("!I", data[:4])[0]  # IMPROVEMENT: Read sequence number
+                payload = data[4:]                          # IMPROVEMENT: Extract payload
                 # Protocol: If we receive an empty packet, it means "End of File"
-                if not data:
+                if not payload:#IMPROVEMENT::this is required because of the header
                     print(f"[*] End of file signal received from {addr}. Closing.")
                     break
                 if f is None:
@@ -30,7 +38,16 @@ def run_server(port, output_file):
                     f = open(sender_filename, 'wb')
                     print(f"[*] First packet received from {addr}. File opened for writing as '{sender_filename}'.")
                 # Write data to disk
-                f.write(data)
+                if seq_num == expected_seq:
+                    f.write(payload)                      # IMPROVEMENT: Write in-order data
+                    expected_seq += 1                     # IMPROVEMENT: Move to next sequence
+                    while expected_seq in buffer:
+                        f.write(buffer.pop(expected_seq)) # IMPROVEMENT: Flush buffered data
+                        expected_seq += 1                 # IMPROVEMENT: Advance sequence
+                elif seq_num > expected_seq:
+                    buffer[seq_num] = payload             # IMPROVEMENT: Buffer out-of-order data
+                else:
+                    pass                                  # IMPROVEMENT: Ignore duplicate packet
                 # print(f"Server received {len(data)} bytes from {addr}") # Optional: noisy
             if f:
                 f.close()
