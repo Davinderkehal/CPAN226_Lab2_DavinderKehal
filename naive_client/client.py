@@ -24,30 +24,37 @@ def run_client(target_ip, target_port, input_file):
     try:
         with open(input_file, 'rb') as f:
             while True:
-                # Read a chunk of the file
-                chunk = f.read(4096) # 4KB chunks
-                
+                chunk = f.read(900)                      # IMPROVEMENT: Read file chunk
                 if not chunk:
-                    # End of file reached
-                    break
+                    break                                 # IMPROVEMENT: EOF reached
 
-                packet = struct.pack("!I", seq_num) + chunk   # IMPROVEMENT: Add sequence header
+                packet = struct.pack("!I", seq_num) + chunk  # IMPROVEMENT: Add sequence header
 
-            while True:
-                sock.sendto(packet, server_address)       # IMPROVEMENT: Send packet
-                try:
-                    ack, _ = sock.recvfrom(4)             # IMPROVEMENT: Wait for ACK
-                    ack_num = struct.unpack("!I", ack)[0] # IMPROVEMENT: Decode ACK
-                    if ack_num == seq_num:
-                        break                              # IMPROVEMENT: ACK confirmed
-                except socket.timeout:
-                    pass                                  # IMPROVEMENT: Retransmit on timeout
+                while True:
+                    sock.sendto(packet, server_address)   # IMPROVEMENT: Send packet
+                    try:
+                        ack, _ = sock.recvfrom(4)         # IMPROVEMENT: Wait for ACK
+                        ack_num = struct.unpack("!I", ack)[0]  # IMPROVEMENT: Decode ACK
+                        if ack_num == seq_num:
+                            break                         # IMPROVEMENT: ACK confirmed
+                    except socket.timeout:
+                        pass                              # IMPROVEMENT: Retransmit on timeout
 
-            seq_num += 1                                  # IMPROVEMENT: Next packet
+                seq_num += 1                              # IMPROVEMENT: Increment sequence
 
         # Send empty packet to signal "End of File"
-        sock.sendto(struct.pack("!I", seq_num), server_address)  # IMPROVEMENT: EOF with sequence
-        print("[*] File transmission complete.")
+        eof_packet = struct.pack("!I", seq_num)                 # IMPROVEMENT: Create EOF packet
+        while True:                                             # IMPROVEMENT: Ensure EOF delivery
+            sock.sendto(eof_packet, server_address)             # IMPROVEMENT: Send EOF packet
+            try:
+                ack, _ = sock.recvfrom(4)                        # IMPROVEMENT: Wait for EOF ACK
+                ack_num = struct.unpack("!I", ack)[0]            # IMPROVEMENT: Decode EOF ACK
+                if ack_num == seq_num:
+                    break                                        # IMPROVEMENT: EOF acknowledged
+            except socket.timeout:
+                pass                                             # IMPROVEMENT: Retransmit EOF
+
+        print("[*] File transmission complete.")                 # IMPROVEMENT: Confirm completion
 
     except Exception as e:
         print(f"[!] Error: {e}")
